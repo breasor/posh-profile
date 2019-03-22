@@ -1,0 +1,112 @@
+﻿
+######## PROMPT
+
+set-content Function:prompt {
+    # Start with a blank line, for breathing room :)
+    Write-Host ""
+
+    # Reset the foreground color to default
+    $Host.UI.RawUI.ForegroundColor = $GitPromptSettings.DefaultColor.ForegroundColor
+
+    # Write ERR for any PowerShell errors
+    if ($Error.Count -ne 0) {
+        Write-Host " " -NoNewLine
+        Write-Host "  ERR " -NoNewLine -BackgroundColor DarkRed -ForegroundColor Yellow
+        $Error.Clear()
+    }
+
+    # Write non-zero exit code from last launched process
+    if ($LASTEXITCODE -ne "") {
+        Write-Host " " -NoNewLine
+        Write-Host "  $LASTEXITCODE " -NoNewLine -BackgroundColor DarkRed -ForegroundColor Yellow
+        $LASTEXITCODE = ""
+    }
+
+    # Write any custom prompt environment (f.e., from vs2017.ps1)
+    if (get-content variable:\PromptEnvironment -ErrorAction Ignore) {
+        Write-Host " " -NoNewLine
+        Write-Host $PromptEnvironment -NoNewLine -BackgroundColor DarkMagenta -ForegroundColor White
+    }
+
+    # Write the current kubectl context
+    if ((Get-Command "kubectl" -ErrorAction Ignore) -ne $null) {
+        $currentContext = (& kubectl config current-context 2> $null)
+        if ($Error.Count -eq 0) {
+            Write-Host " " -NoNewLine
+            Write-Host " " -NoNewLine -BackgroundColor DarkGray -ForegroundColor Green
+            Write-Host " $currentContext " -NoNewLine -BackgroundColor DarkGray -ForegroundColor White
+        }
+        else {
+            $Error.Clear()
+        }
+    }
+
+    # Write the current public cloud Azure CLI subscription
+    # NOTE: You will need sed from somewhere (for example, from Git for Windows)
+    if (Test-Path ~/.azure/clouds.config) {
+        $currentSub = & sed -nr "/^\[AzureCloud\]/ { :l /^subscription[ ]*=/ { s/.*=[ ]*//; p; q;}; n; b l;}" ~/.azure/clouds.config
+        if ($null -ne $currentSub) {
+            $currentAccount = (Get-Content ~/.azure/azureProfile.json | ConvertFrom-Json).subscriptions | Where-Object { $_.id -eq $currentSub }
+            if ($null -ne $currentAccount) {
+                Write-Host " " -NoNewLine
+                Write-Host " " -NoNewLine -BackgroundColor DarkCyan -ForegroundColor Yellow
+                Write-Host " $($currentAccount.name) " -NoNewLine -BackgroundColor DarkCyan -ForegroundColor White
+            }
+        }
+    }
+
+    # Write the current Git information
+    if ((Get-Command "Get-GitDirectory" -ErrorAction Ignore) -ne $null) {
+        if (Get-GitDirectory -ne $null) {
+            Write-Host (Write-VcsStatus) -NoNewLine
+        }
+    }
+
+    # Write the current directory, with home folder normalized to ~
+    $currentPath = (get-location).Path.replace($home, "~")
+    $idx = $currentPath.IndexOf("::")
+    if ($idx -gt -1) { $currentPath = $currentPath.Substring($idx + 2) }
+
+    Write-Host " " -NoNewLine
+    Write-Host " " -NoNewLine -BackgroundColor DarkGreen -ForegroundColor Yellow
+    Write-Host " $currentPath " -NoNewLine -BackgroundColor DarkGreen -ForegroundColor White
+
+    # Reset LASTEXITCODE so we don't show it over and over again
+    $global:LASTEXITCODE = 0
+
+    # Write one + for each level of the pushd stack
+    if ((get-location -stack).Count -gt 0) {
+        Write-Host " " -NoNewLine
+        Write-Host (("+" * ((get-location -stack).Count))) -NoNewLine -ForegroundColor Cyan
+    }
+
+    # Newline
+    Write-Host ""
+
+    # Determine if the user is admin, so we color the prompt green or red
+    $isAdmin = $false
+    $isDesktop = ($PSVersionTable.PSEdition -eq "Desktop")
+
+    if ($isDesktop -or $IsWindows) {
+        $windowsIdentity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+        $windowsPrincipal = new-object 'System.Security.Principal.WindowsPrincipal' $windowsIdentity
+        $isAdmin = $windowsPrincipal.IsInRole("Administrators") -eq 1
+    }
+    else {
+        $isAdmin = ((& id -u) -eq 0)
+    }
+
+    if ($isAdmin) { $color = "Red"; }
+    else { $color = "Green"; }
+
+    # Write PS> for desktop PowerShell, pwsh> for PowerShell Core
+    if ($isDesktop) {
+        Write-Host " PS>" -NoNewLine -ForegroundColor $color
+    }
+    else {
+        Write-Host " pwsh>" -NoNewLine -ForegroundColor $color
+    }
+
+    # Always have to return something or else we get the default prompt
+    return " "
+}
