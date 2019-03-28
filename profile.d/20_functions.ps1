@@ -130,7 +130,7 @@ function get-modules ($ModuleList) {
                 Install-Module $module -Scope CurrentUser -Confirm:$false -ErrorAction SilentlyContinue
             }
             else {
-                Update-Module $module -Confirm:$false -ErrorAction SilentlyContinue
+                #Update-Module $module -Confirm:$false -ErrorAction SilentlyContinue
             }
         }
 
